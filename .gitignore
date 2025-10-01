@@ -1,3 +1,21 @@
+# big files that do not need to be saved
+*.ply 
+*.xyz
+*.las 
+*.laz 
+*.jpg
+*.png 
+# C++
+build/
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+
+# Data
+data/output/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
