@@ -1,0 +1,23 @@
+input: data/input/two_rooms_and_stairs.las
+attribute: Classification
+outdir: data/output/plyfiles/classes
+
+# Per-class outputs to create first
+ids: [1, 2, 3, 5, 6, 25, 27]
+
+# Optional: combinations (keep only IDs present in 'ids' or see note below)
+groups:
+  structural:
+    ids: [1, 2, 3, 4, 5, 6]
+
+# Parameters for the room-splitting step (Option A)
+# NOTE input should be as combined_<groups_name> so look above, structural gives: combined_structural.ply
+rooms:
+  input_combined: data/output/plyfiles/classes/combined_structural.ply
+  outdir:        data/output/plyfiles/rooms
+  voxel: 0.15
+  slice_min: 0.25
+  slice_max: 2.25
+  grid: 0.10
+  min_area: 1.0
+  save_colored_all: true
