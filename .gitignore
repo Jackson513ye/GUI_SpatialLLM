@@ -3,8 +3,12 @@
 *.xyz
 *.las 
 *.laz 
+*.obj
+*.bvg
+*.vg
 *.jpg
 *.png 
+*.e57
 # C++
 build/
 *.o
@@ -12,6 +16,10 @@ build/
 *.so
 *.dll
 *.dylib
+*.png
+*.jpg
+*.json
+*.csv
 
 # Data
 data/output/

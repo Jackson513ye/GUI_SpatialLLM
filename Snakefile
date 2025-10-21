@@ -1,22 +1,67 @@
 configfile: "config.yaml"
 import re
+import sys
+from pathlib import Path
+from snakemake.shell import shell
+shell.executable("bash")
 
 # --- config values ---
-LAS        = config["input"]
-OUTDIR     = config["outdir"]
-ATTRIBUTE  = config.get("attribute", "Classification")
-GROUPS     = config.get("groups", {})
-IDS        = [int(i) for i in config["ids"]]
+LAS         = config["input"]
+OUTDIR      = config["outdir"]
+ATTRIBUTE   = config.get("attribute", "Classification")
+GROUPS      = config.get("groups", {})
+IDS         = [int(i) for i in config["ids"]]
 
-ROOMS_CFG  = config.get("rooms", {})
-COMBINED_PLY = ROOMS_CFG.get("input_combined", "data/output/combined.ply")
+# --- Extract panoramas
+PANORAMA_CFG  = config.get("extract_panoramas", {})
+E57           = PANORAMA_CFG.get("input", "data/input/deSkatting.e57")
+PANOS_DIR     = PANORAMA_CFG.get("outdir", "data/input/panoramas")
+PANOS_DONE    = f"{PANOS_DIR}/_SUCCESS"
+
+# Room segmentation (Option A)
+ROOMS_CFG     = config.get("rooms", {})
+COMBINED_GRP  = ROOMS_CFG.get("combined_group", None)
+if COMBINED_GRP is None:
+    raise ValueError("Set rooms.combined_group in config (e.g., 'structural').")
+COMBINED_PLY  = ROOMS_CFG.get(
+    "input_combined",
+    f"{OUTDIR}/combined_{COMBINED_GRP}.ply"
+)
+ROOMS_INDIR   = ROOMS_CFG.get("input", "data/input/")
 ROOMS_DIR     = ROOMS_CFG.get("outdir", f"{OUTDIR}/rooms")
-VOX   = float(ROOMS_CFG.get("voxel", 0.15))
-ZMIN  = float(ROOMS_CFG.get("slice_min", 0.25))
-ZMAX  = float(ROOMS_CFG.get("slice_max", 2.25))
-GRID  = float(ROOMS_CFG.get("grid", 0.10))
-MIN_A = float(ROOMS_CFG.get("min_area", 1.0))
-SAVE_COLORED = bool(ROOMS_CFG.get("save_colored_all", True))
+VOX           = float(ROOMS_CFG.get("voxel", 0.15))
+GRID          = float(ROOMS_CFG.get("grid", 0.10))
+MIN_A         = float(ROOMS_CFG.get("min_area", 1.0))
+EXPAND_DIST   = float(ROOMS_CFG.get("expand_dist", 0.3))
+
+# ---- BVG/PolyFit over room hierarchy of shell_*.ply ----
+PLY2BVG_CFG   = config.get("ply2bvg", {})
+IN_ROOT       = PLY2BVG_CFG.get("in_root", "data/output")
+ROOM_PATTERN  = PLY2BVG_CFG.get("room_pattern", "floor_{floor}/room_{room}")
+PLY_GLOB      = PLY2BVG_CFG.get("ply_glob", "shell_*.ply")
+BVG_ROOT      = PLY2BVG_CFG.get("out_root", "data/output/bvgfiles")
+
+MIN_SUPPORT     = int(PLY2BVG_CFG.get("min_support", 5000))
+DIST_THRESH     = float(PLY2BVG_CFG.get("dist_threshold", 0.005))
+BITMAP_RES      = float(PLY2BVG_CFG.get("bitmap_resolution", 0.02))
+NORMAL_THRESH   = float(PLY2BVG_CFG.get("normal_threshold", 0.8))
+OVERLOOK_PROB   = float(PLY2BVG_CFG.get("overlook_probability", 0.001))
+
+POLY_CFG     = config.get("polyfit", {})
+OBJ_ROOT     = POLY_CFG.get("out_root", "data/output/objfiles")
+SOLVER       = POLY_CFG.get("solver", "SCIP")
+W_DATA       = float(POLY_CFG.get("w_data", 0.43))
+W_COVER      = float(POLY_CFG.get("w_cover", 0.27))
+W_COMPLEX    = float(POLY_CFG.get("w_complex", 0.30))
+
+# ---- CSV export over OBJ rooms ----
+CSV_CFG   = config.get("rooms_csvs", {})  # you can keep the same section name if you like
+CSV_ROOT  = CSV_CFG.get("out_root", "planes")   # <— changed default to project-root 'planes'
+ANGLE_DEG = float(CSV_CFG.get("angle_deg", 1.0))
+DIST_EPS  = CSV_CFG.get("dist_eps", 0.0005)
+WALL_TOL  = float(CSV_CFG.get("wall_tol_deg", 10.0))
+FLOOR_TOL = float(CSV_CFG.get("floor_tol_deg", 20.0))
+
 
 # --- class dictionary (id -> name) ---
 CLASSES = {
@@ -29,8 +74,8 @@ CLASSES = {
 }
 
 # Build name lists and inverse mapping
-NAMES    = [CLASSES[i] for i in IDS]
-NAME2ID  = {v: k for k, v in CLASSES.items()}
+NAMES   = [CLASSES[i] for i in IDS]
+NAME2ID = {v: k for k, v in CLASSES.items()}
 
 # Constrain {name} to the exact allowed names so it won't match "combined_*"
 NAME_REGEX = "(" + "|".join(re.escape(n) for n in NAMES) + ")"
@@ -43,19 +88,17 @@ def group_name_deps(wc):
     present = [i for i in gid_list if i in IDS]
     return [f"{OUTDIR}/{CLASSES[i]}.ply" for i in present]
 
-# --------------------------
-# TARGETS
-# --------------------------
-rule all:
+rule panoramas:
     input:
-        # per-class outputs by name
-        expand(f"{OUTDIR}/{{name}}.ply", name=NAMES),
-        # combined group outputs
-        expand(f"{OUTDIR}/combined_{{gname}}.ply", gname=list(GROUPS.keys())),
-        # single combined file (from all IDS)
-        COMBINED_PLY,
-        # directory produced by room-splitting on the combined ply
-        directory(ROOMS_DIR)
+        e57 = E57
+    output:
+        success = PANOS_DONE
+    params:
+        outdir = PANOS_DIR
+    shell:
+        "python py_scripts/get_images_and_poses.py "
+        "{input.e57} --outfolder {params.outdir} "
+        "&& python -c \"open(r'{output.success}','w').write('OK\\n')\""
 
 # --------------------------
 # PER-CLASS (single-ID -> name.ply)
@@ -67,14 +110,14 @@ rule per_class:
         ply = f"{OUTDIR}/{{name}}.ply"
     params:
         attribute = ATTRIBUTE,
-        id = lambda wc: NAME2ID[wc.name]   # map name -> id for the script
+        id = lambda wc: NAME2ID[wc.name]
     shell:
         "python py_scripts/las_to_ply.py "
         "--input {input.las} --output {output.ply} "
         "--attribute {params.attribute} --ids {params.id} --mode separate"
 
 # --------------------------
-# COMBINED GROUPS (named combos, optional)
+# COMBINED GROUPS (named combos)
 # --------------------------
 rule combined_group:
     input:
@@ -91,24 +134,173 @@ rule combined_group:
         "--attribute {params.attribute} --ids {params.ids} --mode combined"
 
 # --------------------------
-# SINGLE COMBINED FILE (from all 'ids')
+# ROOM-SPLITTING (Option A) on the chosen combined file
 # --------------------------
-
-
-# --------------------------
-# ROOM-SPLITTING (Option A) on the single combined file
-# --------------------------
-rule split_rooms_from_combined:
+checkpoint split_rooms_from_combined:
     input:
-        ply = COMBINED_PLY
+        combined = COMBINED_PLY,   # forces dependency
+        indir    = ROOMS_INDIR
     output:
-        directory(ROOMS_DIR)
+        success = f"{ROOMS_DIR}/_SUCCESS"
     params:
-        voxel=VOX, slice_min=ZMIN, slice_max=ZMAX, grid=GRID, min_area=MIN_A,
-        save_colored=("--save-colored-all" if SAVE_COLORED else "")
+        voxel=VOX, grid=GRID, min_area=MIN_A,
+        expand_dist=EXPAND_DIST,
+        outdir=ROOMS_DIR
     shell:
-        "python py_scripts/segment_rooms.py "
-        "--input {input.ply} --outdir {output} "
-        "--voxel {params.voxel} --slice-min {params.slice_min} "
-        "--slice-max {params.slice_max} --grid {params.grid} "
-        "--min-room-area {params.min_area} {params.save_colored}"
+        "python py_scripts/segment_rooms_mark.py "
+        "--input_dir {input.indir} --output_dir {params.outdir} "
+        "--voxel {params.voxel} "
+        "--grid {params.grid} "
+        "--min-room-area {params.min_area} --expand_dist {params.expand_dist} "
+        "&& python -c \"open(r'{output.success}','w').write('OK\\n')\""
+
+from snakemake.io import glob_wildcards
+
+def _discover_rooms_after_checkpoint():
+    # ensure the checkpoint executed
+    _ = checkpoints.split_rooms_from_combined.get().output.success
+    # discover only rooms that actually contain shell PLYs
+    floors, rooms, _shells = glob_wildcards(
+        f"{IN_ROOT}/floor_{{floor}}/room_{{room}}/shell_{{shell}}.ply"
+    )
+    # unique pairs, sorted for determinism
+    pairs = sorted(set(zip(floors, rooms)))
+    return [p[0] for p in pairs], [p[1] for p in pairs]
+
+def discovered_room_success_targets(wc):
+    floors, rooms = _discover_rooms_after_checkpoint()
+    return expand(f"{BVG_ROOT}/floor_{{floor}}/room_{{room}}/_BVG_SUCCESS",
+                  floor=floors, room=rooms)
+
+def discovered_obj_success_targets(wc):
+    floors, rooms = _discover_rooms_after_checkpoint()
+    return expand(f"{OBJ_ROOT}/floor_{{floor}}/room_{{room}}/_OBJ_SUCCESS",
+                  floor=floors, room=rooms)
+
+def discovered_csv_success_targets(wc):
+    floors, rooms = _discover_rooms_after_checkpoint()
+    return expand(f"{CSV_ROOT}/floor_{{floor}}/room_{{room}}/_CSV_SUCCESS",
+                  floor=floors, room=rooms)
+
+rule all:
+    input:
+        PANOS_DONE,
+        expand(f"{OUTDIR}/{{name}}.ply", name=NAMES),
+        expand(f"{OUTDIR}/combined_{{gname}}.ply", gname=list(GROUPS.keys())),
+        COMBINED_PLY,
+        f"{ROOMS_DIR}/_SUCCESS",
+        discovered_room_success_targets,
+        discovered_obj_success_targets,
+        discovered_csv_success_targets,   # <— use the helper
+
+# --------------------------
+# ROOMS -> BVG (Easy3D RANSAC planes)
+# Uses ROOMS_DIR as input (your config sets this to data/output/plyfiles/rooms)
+# and writes BVGs to ply2bvg.out_dir (VG_OUTDIR)
+# --------------------------
+# --------------------------
+# BVG per room (only shell_*.ply inside each room)
+# Writes to a mirrored structure and drops a per-room _SUCCESS marker.
+# --------------------------
+rule bvg_per_room:
+    input:
+        room_dir=lambda wc: f"{IN_ROOT}/floor_{wc.floor}/room_{wc.room}"
+    output:
+        success = BVG_ROOT + "/floor_{floor}/room_{room}/_BVG_SUCCESS"
+    params:
+        out_dir = BVG_ROOT + "/floor_{floor}/room_{room}",
+        ply_glob = PLY_GLOB,
+        min_support = MIN_SUPPORT,
+        dist_threshold = DIST_THRESH,
+        bitmap_resolution = BITMAP_RES,
+        normal_threshold = NORMAL_THRESH,
+        overlook_probability = OVERLOOK_PROB
+    shell:
+        "python py_scripts/ransac_and_plane_detection.py "
+        "--in-dir {input.room_dir} "
+        "--out-dir {params.out_dir} "
+        "--glob {params.ply_glob} "
+        "--min-support {params.min_support} "
+        "--dist-threshold {params.dist_threshold} "
+        "--bitmap-resolution {params.bitmap_resolution} "
+        "--normal-threshold {params.normal_threshold} "
+        "--overlook-probability {params.overlook_probability} "
+        "&& python -c \"import pathlib; pathlib.Path(r'{output.success}').parent.mkdir(parents=True, exist_ok=True); pathlib.Path(r'{output.success}').write_text('OK\\n')\""
+
+# --------------------------
+# PolyFit per room (convert BVGs in that room to OBJ)
+# --------------------------
+rule obj_per_room:
+    input:
+        bvg_done = BVG_ROOT + "/floor_{floor}/room_{room}/_BVG_SUCCESS"
+    output:
+        success  = OBJ_ROOT + "/floor_{floor}/room_{room}/_OBJ_SUCCESS"
+    params:
+        in_dir  = BVG_ROOT + "/floor_{floor}/room_{room}",
+        out_dir = OBJ_ROOT + "/floor_{floor}/room_{room}",
+        solver  = SOLVER,
+        w_data  = W_DATA,
+        w_cover = W_COVER,
+        w_complex = W_COMPLEX
+    shell:
+        "python py_scripts/polyfit_for_rooms.py "
+        "--in-dir {params.in_dir} --out-dir {params.out_dir} "
+        "--solver {params.solver} --w-data {params.w_data} "
+        "--w-cover {params.w_cover} --w-complex {params.w_complex} "
+        "&& python -c \"import pathlib; pathlib.Path(r'{output.success}').parent.mkdir(parents=True, exist_ok=True); pathlib.Path(r'{output.success}').write_text('OK\\n')\""
+
+rule csvs_per_room:
+    input:
+        obj_done = OBJ_ROOT + "/floor_{floor}/room_{room}/_OBJ_SUCCESS"
+    output:
+        success  = CSV_ROOT + "/floor_{floor}/room_{room}/_CSV_SUCCESS"
+    params:
+        obj_dir   = OBJ_ROOT + "/floor_{floor}/room_{room}",
+        out_dir   = CSV_ROOT + "/floor_{floor}/room_{room}",  # planes/floor_X/room_Y/
+        angle     = ANGLE_DEG,
+        wall_tol  = WALL_TOL,
+        floor_tol = FLOOR_TOL,
+        dist_eps  = DIST_EPS   # float or None
+    run:
+        import sys, subprocess, csv
+        from pathlib import Path
+
+        obj_dir = Path(params.obj_dir)
+        out_dir = Path(params.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # find the single OBJ (if any)
+        objs = list(obj_dir.glob("*.obj"))
+        if not objs:
+            # No OBJ: write header-only CSV so downstream is happy
+            header = ["group_name","class","face_count","area",
+                      "centroid_x","centroid_y","centroid_z",
+                      "normal_x","normal_y","normal_z",
+                      "lowest_x","lowest_y","lowest_z",
+                      "highest_x","highest_y","highest_z","obj_path"]
+            with (out_dir / "planes_report.csv").open("w", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerow(header)
+            Path(output.success).parent.mkdir(parents=True, exist_ok=True)
+            Path(output.success).write_text("OK\n")
+            return
+
+        obj = objs[0]
+
+        # choose script: prefer planes_report_from_obj.py, fallback to room_calculator.py
+        script = Path("py_scripts/room_calculator.py")
+
+        cmd = [
+            sys.executable, str(script),
+            "--obj", str(obj),
+            "--outdir", str(out_dir),              # writes planes_report.csv + out_planes/
+            "--angle", str(params.angle),
+            "--wall_tol_deg", str(params.wall_tol),
+            "--floor_tol_deg", str(params.floor_tol),
+        ]
+        if params.dist_eps is not None:
+            cmd += ["--dist_eps", str(params.dist_eps)]
+
+        subprocess.check_call(cmd)
+
+        Path(output.success).parent.mkdir(parents=True, exist_ok=True)
+        Path(output.success).write_text("OK\n")
