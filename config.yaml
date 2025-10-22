@@ -39,8 +39,8 @@ ply2bvg:
   out_root: "data/output"
 
   # RANSAC params (unchanged)
-  min_support: 5000
-  dist_threshold: 0.005
+  min_support: 1500
+  dist_threshold: 0.020
   bitmap_resolution: 0.02
   normal_threshold: 0.8
   overlook_probability: 0.001
