@@ -203,17 +203,27 @@ def save_pano_to_room(pano_locations: dict,
                         out_dir: Path):
     """Store the correct panoramas to the correct rooms"""
 
+    workable_rooms = set()
+    correct_order_map = {}
+    first_label = 1
+
     for i in range(len(pano_coords)):
         if point_room_ids[i]:
             image = [k for k, v in pano_locations.items() if np.array_equal(v, pano_coords[i])]
             if image:
                 room_id = next(iter(point_room_ids[i]))
+                if room_id not in workable_rooms:
+                    workable_rooms.add(room_id)
+                    correct_order_map[room_id] = first_label
+                    first_label += 1
                 src_path = source_dir / f"{image[0]}"
                 out_path = out_dir / f"room_{room_id:03d}"
                 out_dir.mkdir(parents=True, exist_ok=True)
                 out_path_image = out_path / f"{image[0]}"
 
                 shutil.copy(src_path, out_path_image)
+
+    return workable_rooms, correct_order_map
 
 
 def write_manifest_rooms(manifest_rows, out_dir: Path,
@@ -288,11 +298,6 @@ def run_split(
         labels_2d, labels, pixel_expand, width, height, plot, output_dir
     )
 
-    # 4) Project labels to 3D points
-    point_room_ids = label_points_from_grid(
-        points, room_membership, x_min, y_min, grid_res, width, height
-    )
-
     pano_coords = np.asarray(list(pano_locations.values()))
 
     point_room_ids_pano = label_points_from_grid(
@@ -301,11 +306,34 @@ def run_split(
 
     input_dir_panos = input_dir / f"panoramas/images"
 
-    save_pano_to_room(
+    workable_rooms, correct_order_map = save_pano_to_room(
         pano_locations, pano_coords, point_room_ids_pano, input_dir_panos, output_dir
     )
 
-    unique_labels = np.unique(labels_2d_filled[labels_2d_filled >= 0])
+    for inner_list in room_membership:
+        for i in range(len(inner_list)):
+            s = inner_list[i]
+            if not isinstance(s, set):
+                try:
+                    s = set(s)
+                except TypeError:
+                    s = set()
+            filtered = s & workable_rooms
+            if filtered:
+                reworked_value = set()
+                reworked_value.add(correct_order_map[next(iter(filtered))])
+                inner_list[i] = reworked_value
+            else:
+                inner_list[i] = set()
+
+    # 4) Project labels to 3D points
+    point_room_ids = label_points_from_grid(
+        points, room_membership, x_min, y_min, grid_res, width, height
+    )
+
+    unique_labels = np.array([0])
+    for label in correct_order_map:
+        unique_labels = unique_labels.append(label)
 
     # 5) Save each room PLY + optional combined colored
     obj_type = "shell"
@@ -335,18 +363,6 @@ def run_split(
 
         write_manifest_object(manifest2, output_dir, floor_nr, object)
         print(f"[save] {object} manifest")
-
-    room_nr = "001"
-
-    for room in output_dir.iterdir():
-        if room.is_dir():
-            if not room.name.endswith(room_nr):
-                for obj in room.iterdir():
-                    if obj.name.split(".")[-1] == "ply":
-                        obj_name = obj.name.split("_")[0]
-                        obj.rename(output_dir / room.name / f"{obj_name}_{room_nr}.ply")
-                room.rename(output_dir / f"room_{room_nr}")
-            room_nr = str(int(room_nr) + 1).zfill(len(room_nr))
 
     print("Done. Each dense room exported to: ", output_dir)
 
