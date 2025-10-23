@@ -262,7 +262,6 @@ def run_split(
     expand_dist: float,
     plot: bool,
 ):
-
     input_grid_file = input_dir / f"floors/{floor}/combined_structural_{floor}.ply"
     output_dir = output_dir / f"floor_{floor_nr}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -294,7 +293,17 @@ def run_split(
         points, room_membership, x_min, y_min, grid_res, width, height
     )
 
-    print(point_room_ids)
+    pano_coords = np.asarray(list(pano_locations.values()))
+
+    point_room_ids_pano = label_points_from_grid(
+        pano_coords, room_membership, x_min, y_min, grid_res, width, height
+    )
+
+    input_dir_panos = input_dir / f"panoramas/images"
+
+    save_pano_to_room(
+        pano_locations, pano_coords, point_room_ids_pano, input_dir_panos, output_dir
+    )
 
     unique_labels = np.unique(labels_2d_filled[labels_2d_filled >= 0])
 
@@ -326,18 +335,6 @@ def run_split(
 
         write_manifest_object(manifest2, output_dir, floor_nr, object)
         print(f"[save] {object} manifest")
-
-    pano_coords = np.asarray(list(pano_locations.values()))
-
-    point_room_ids_pano = label_points_from_grid(
-        pano_coords, room_membership, x_min, y_min, grid_res, width, height
-    )
-
-    input_dir_panos = input_dir / f"panoramas/images"
-
-    save_pano_to_room(
-        pano_locations, pano_coords, point_room_ids_pano, input_dir_panos, output_dir
-    )
 
     room_nr = "001"
 
