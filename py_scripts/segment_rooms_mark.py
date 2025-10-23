@@ -105,7 +105,7 @@ def fill_walls_evenly(labels_filtered: np.ndarray,
                       labels: np.ndarray,
                       pixel_expand:int,
                       width: int, height: int,
-                      floor: int, plot: bool):
+                      plot: bool, out_dir: Path):
     """Propagate labels into wall pixels to close gaps."""
     label_filled = labels_filtered.copy()
     # Prepare room membership grid (2D array of sets)
@@ -142,7 +142,8 @@ def fill_walls_evenly(labels_filtered: np.ndarray,
         plt.imshow(overlap_visual, cmap="plasma")
         plt.title("Expanded Overlaps (yellow = shared walls)")
         plt.colorbar()
-        plt.savefig(f"output_house/floor_{floor}/floorplan.png")
+        out_path = Path(out_dir / "floorplan.png")
+        plt.savefig(out_path)
         plt.show()
 
     return label_filled, room_memberships
@@ -186,11 +187,13 @@ def split_and_save_rooms(points_xyz: np.ndarray,
         room_pcd.points = o3d.utility.Vector3dVector(points_xyz[indices])
         if colors is not None:
             room_pcd.colors = o3d.utility.Vector3dVector(colors[indices])
-        out_path = out_dir / f"room_{int(lab):03d}/{obj_type}_{int(lab):03d}.ply"
-        out_path.parent.mkdir(parents=True, exist_ok=True)  # make sure folder exists
-        o3d.io.write_point_cloud(out_path, room_pcd)
 
-        manifest.append((int(lab), str(out_path), int(len(indices))))
+        out_path = Path(out_dir / f"room_{int(lab):03d}")
+        if out_path.exists():
+            out_path_room = out_path / f"{obj_type}_{int(lab):03d}.ply"
+            o3d.io.write_point_cloud(out_path_room, room_pcd)
+            manifest.append((int(lab), str(out_path_room), int(len(indices))))
+
     return manifest
 
 def save_pano_to_room(pano_locations: dict,
@@ -206,9 +209,11 @@ def save_pano_to_room(pano_locations: dict,
             if image:
                 room_id = next(iter(point_room_ids[i]))
                 src_path = source_dir / f"{image[0]}"
-                out_path = out_dir / f"room_{room_id:03d}/{image[0]}"
+                out_path = out_dir / f"room_{room_id:03d}"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path_image = out_path / f"{image[0]}"
 
-                shutil.copy(src_path, out_path)
+                shutil.copy(src_path, out_path_image)
 
 
 def write_manifest_rooms(manifest_rows, out_dir: Path,
@@ -257,7 +262,6 @@ def run_split(
     expand_dist: float,
     plot: bool,
 ):
-
     input_grid_file = input_dir / f"floors/{floor}/combined_structural_{floor}.ply"
     output_dir = output_dir / f"floor_{floor_nr}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -280,13 +284,25 @@ def run_split(
     labels_2d, count_rooms, labels = label_rooms_from_grid(grid, grid_res, min_room_area_m2)
     print(f"[rooms] after filtering: {count_rooms}")
 
-    labels_2d_filled, room_membership = fill_walls_evenly(labels_2d, labels, pixel_expand, width, height, floor_nr, plot)
-
-    #TODO: Make catch if floorplan cant be made for --> occlusion in twente dataset
+    labels_2d_filled, room_membership = fill_walls_evenly(
+        labels_2d, labels, pixel_expand, width, height, plot, output_dir
+    )
 
     # 4) Project labels to 3D points
     point_room_ids = label_points_from_grid(
         points, room_membership, x_min, y_min, grid_res, width, height
+    )
+
+    pano_coords = np.asarray(list(pano_locations.values()))
+
+    point_room_ids_pano = label_points_from_grid(
+        pano_coords, room_membership, x_min, y_min, grid_res, width, height
+    )
+
+    input_dir_panos = input_dir / f"panoramas/images"
+
+    save_pano_to_room(
+        pano_locations, pano_coords, point_room_ids_pano, input_dir_panos, output_dir
     )
 
     unique_labels = np.unique(labels_2d_filled[labels_2d_filled >= 0])
@@ -320,27 +336,17 @@ def run_split(
         write_manifest_object(manifest2, output_dir, floor_nr, object)
         print(f"[save] {object} manifest")
 
-    pano_coords = np.asarray(list(pano_locations.values()))
-
-    point_room_ids_pano = label_points_from_grid(
-        pano_coords, room_membership, x_min, y_min, grid_res, width, height
-    )
-
-    input_dir_panos = input_dir / f"panoramas/images"
-
-    save_pano_to_room(
-        pano_locations, pano_coords, point_room_ids_pano, input_dir_panos, output_dir
-    )
+    room_nr = "001"
 
     for room in output_dir.iterdir():
-        has_pano = False
         if room.is_dir():
-            for pano_file in room.iterdir():
-                if pano_file.name.split(".")[-1]  in ["png","jpg"]:
-                    has_pano = True
-            if not has_pano:
-                print(f"[remove] {room} folder removed from {output_dir}")
-                #shutil.rmtree(room)
+            if not room.name.endswith(room_nr):
+                for obj in room.iterdir():
+                    if obj.name.split(".")[-1] == "ply":
+                        obj_name = obj.name.split("_")[0]
+                        obj.rename(output_dir / room.name / f"{obj_name}_{room_nr}.ply")
+                room.rename(output_dir / f"room_{room_nr}")
+            room_nr = str(int(room_nr) + 1).zfill(len(room_nr))
 
     print("Done. Each dense room exported to: ", output_dir)
 
