@@ -5,20 +5,20 @@ from pathlib import Path
 from snakemake.shell import shell
 shell.executable("bash")
 
-# --- config values ---
+# config values 
 LAS         = config["input"]
 OUTDIR      = config["outdir"]
 ATTRIBUTE   = config.get("attribute", "Classification")
 GROUPS      = config.get("groups", {})
 IDS         = [int(i) for i in config["ids"]]
 
-# --- Extract panoramas
+# Extract panoramas
 PANORAMA_CFG  = config.get("extract_panoramas", {})
 E57           = PANORAMA_CFG.get("input", "data/input/deSkatting.e57")
 PANOS_DIR     = PANORAMA_CFG.get("outdir", "data/input/panoramas")
 PANOS_DONE    = f"{PANOS_DIR}/_SUCCESS"
 
-# Room segmentation (Option A)
+# Room segmentation 
 ROOMS_CFG     = config.get("rooms", {})
 COMBINED_GRP  = ROOMS_CFG.get("combined_group", None)
 if COMBINED_GRP is None:
@@ -34,7 +34,7 @@ GRID          = float(ROOMS_CFG.get("grid", 0.10))
 MIN_A         = float(ROOMS_CFG.get("min_area", 1.0))
 EXPAND_DIST   = float(ROOMS_CFG.get("expand_dist", 0.3))
 
-# ---- BVG/PolyFit over room hierarchy of shell_*.ply ----
+# BVG/PolyFit over room hierarchy of shell_*.ply 
 PLY2BVG_CFG   = config.get("ply2bvg", {})
 IN_ROOT       = PLY2BVG_CFG.get("in_root", "data/output")
 ROOM_PATTERN  = PLY2BVG_CFG.get("room_pattern", "floor_{floor}/room_{room}")
@@ -54,16 +54,16 @@ W_DATA       = float(POLY_CFG.get("w_data", 0.43))
 W_COVER      = float(POLY_CFG.get("w_cover", 0.27))
 W_COMPLEX    = float(POLY_CFG.get("w_complex", 0.30))
 
-# ---- CSV export over OBJ rooms ----
-CSV_CFG   = config.get("rooms_csvs", {})  # you can keep the same section name if you like
-CSV_ROOT  = CSV_CFG.get("out_root", "planes")   # <— changed default to project-root 'planes'
+# CSV export over OBJ rooms 
+CSV_CFG   = config.get("rooms_csvs", {})  
+CSV_ROOT  = CSV_CFG.get("out_root", "planes") 
 ANGLE_DEG = float(CSV_CFG.get("angle_deg", 1.0))
 DIST_EPS  = CSV_CFG.get("dist_eps", 0.0005)
 WALL_TOL  = float(CSV_CFG.get("wall_tol_deg", 10.0))
 FLOOR_TOL = float(CSV_CFG.get("floor_tol_deg", 20.0))
 
 
-# --- class dictionary (id -> name) ---
+# class dictionary (id -> name)
 CLASSES = {
     0: "unclassified", 1: "ceiling", 2: "floor", 3: "wall", 4: "wall_ext",
     5: "beam", 6: "column", 7: "window", 8: "door", 9: "door_leaf",
@@ -134,7 +134,7 @@ rule combined_group:
         "--attribute {params.attribute} --ids {params.ids} --mode combined"
 
 # --------------------------
-# ROOM-SPLITTING (Option A) on the chosen combined file
+# ROOM-SPLITTING on the chosen combined file
 # --------------------------
 checkpoint split_rooms_from_combined:
     input:
@@ -153,6 +153,7 @@ checkpoint split_rooms_from_combined:
         "--grid {params.grid} "
         "--min-room-area {params.min_area} --expand_dist {params.expand_dist} "
         "&& python -c \"open(r'{output.success}','w').write('OK\\n')\""
+
 
 from snakemake.io import glob_wildcards
 
@@ -191,13 +192,8 @@ rule all:
         f"{ROOMS_DIR}/_SUCCESS",
         discovered_room_success_targets,
         discovered_obj_success_targets,
-        discovered_csv_success_targets,   # <— use the helper
-
-# --------------------------
-# ROOMS -> BVG (Easy3D RANSAC planes)
-# Uses ROOMS_DIR as input (your config sets this to data/output/plyfiles/rooms)
-# and writes BVGs to ply2bvg.out_dir (VG_OUTDIR)
-# --------------------------
+        discovered_csv_success_targets,  
+        "data/output/_PCG_DONE"
 # --------------------------
 # BVG per room (only shell_*.ply inside each room)
 # Writes to a mirrored structure and drops a per-room _SUCCESS marker.
@@ -249,6 +245,9 @@ rule obj_per_room:
         "--w-cover {params.w_cover} --w-complex {params.w_complex} "
         "&& python -c \"import pathlib; pathlib.Path(r'{output.success}').parent.mkdir(parents=True, exist_ok=True); pathlib.Path(r'{output.success}').write_text('OK\\n')\""
 
+# --------------------------
+# Generate a csv for each room containing the planes
+# --------------------------
 rule csvs_per_room:
     input:
         obj_done = OBJ_ROOT + "/floor_{floor}/room_{room}/_OBJ_SUCCESS"
@@ -286,7 +285,6 @@ rule csvs_per_room:
 
         obj = objs[0]
 
-        # choose script: prefer planes_report_from_obj.py, fallback to room_calculator.py
         script = Path("py_scripts/room_calculator.py")
 
         cmd = [
@@ -304,3 +302,41 @@ rule csvs_per_room:
 
         Path(output.success).parent.mkdir(parents=True, exist_ok=True)
         Path(output.success).write_text("OK\n")
+
+
+rule pcg_room_final:
+    # depend on all previous final markers
+    input:
+        discovered_csv_success_targets
+    output:
+        touch("data/output/_PCG_DONE")
+    run:
+        import platform, subprocess, shutil
+        from pathlib import Path
+        pcg_cfg = config.get("pcg", {})
+        IN  = pcg_cfg.get("in",  "data/output")
+        OUT = pcg_cfg.get("out", "data/output")
+        exes = pcg_cfg.get("exe", {})
+        system = platform.system()
+
+        def run_cmd(cmd_list):
+            subprocess.check_call(cmd_list)
+
+        if system == "Windows":
+            exe_win = exes.get("windows")
+            if exe_win and Path(exe_win).exists():
+                Path(OUT).mkdir(parents=True, exist_ok=True)
+                run_cmd([exe_win, IN, OUT])
+            elif shutil.which("wsl"):
+                exe_wsl = exes.get("wsl", "LM2PCG/build/pcg_room")
+                IN_WSL  = subprocess.check_output(["wsl", "wslpath", "-a", IN]).decode().strip()
+                OUT_WSL = subprocess.check_output(["wsl", "wslpath", "-a", OUT]).decode().strip()
+                EXE_WSL = subprocess.check_output(["wsl", "wslpath", "-a", exe_wsl]).decode().strip()
+                run_cmd(["wsl", "bash", "-lc", f'mkdir -p "{OUT_WSL}" && "{EXE_WSL}" "{IN_WSL}" "{OUT_WSL}"'])
+            else:
+                raise RuntimeError("Windows detected, but neither a native pcg_room.exe nor WSL is available.")
+        else:
+            exe_posix = exes.get("linux" if system == "Linux" else "macos",
+                                 "LM2PCG/build/pcg_room")
+            Path(OUT).mkdir(parents=True, exist_ok=True)
+            run_cmd([exe_posix, IN, OUT])

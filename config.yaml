@@ -13,6 +13,8 @@ ids: [1, 2, 7, 8, 10, 11, 12, 16, 17, 18, 19, 20, 21, 22, 23]
 groups:
   structural:
     ids: [1, 2, 3, 4, 5, 6]
+  non_structural:
+    ids: [5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30]
 
 # Parameters for the room-splitting step (Option A)
 # NOTE input should be as combined_<groups_name> so look above, structural gives: combined_structural.ply
@@ -59,4 +61,14 @@ rooms_csvs:
   dist_eps: 0.005   # optional; if omitted, defaults to 1e-4 * bbox diagonal
   wall_tol_deg: 10.0
   floor_tol_deg: 20.0
+
+pcg:
+  in:  "data/output"
+  out: "data/output"
+  exe:
+    linux:   "LM2PCG/build/pcg_room"                 # ELF
+    macos:   "LM2PCG/build/pcg_room"                 # Mach-O
+    windows: "C:\\path\\to\\LM2PCG\\build\\pcg_room.exe"  # optional native .exe
+    wsl:     "LM2PCG/build/pcg_room"                 # ELF inside WSL
+
 
