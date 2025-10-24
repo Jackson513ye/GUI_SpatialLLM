@@ -155,18 +155,30 @@ checkpoint split_rooms_from_combined:
         "&& python -c \"open(r'{output.success}','w').write('OK\\n')\""
 
 
+
+from pathlib import Path
 from snakemake.io import glob_wildcards
 
 def _discover_rooms_after_checkpoint():
-    # ensure the checkpoint executed
+    # force checkpoint resolution first
     _ = checkpoints.split_rooms_from_combined.get().output.success
-    # discover only rooms that actually contain shell PLYs
+
     floors, rooms, _shells = glob_wildcards(
         f"{IN_ROOT}/floor_{{floor}}/room_{{room}}/shell_{{shell}}.ply"
     )
-    # unique pairs, sorted for determinism
     pairs = sorted(set(zip(floors, rooms)))
-    return [p[0] for p in pairs], [p[1] for p in pairs]
+
+    kept = []
+    for f, r in pairs:
+        room_path = Path(f"{IN_ROOT}/floor_{f}/room_{r}")
+        if any(room_path.glob("shell_*.ply")):  # only keep rooms that have shells
+            kept.append((f, r))
+
+    floors = [p[0] for p in kept]
+    rooms  = [p[1] for p in kept]
+    return floors, rooms
+
+
 
 def discovered_room_success_targets(wc):
     floors, rooms = _discover_rooms_after_checkpoint()
@@ -199,29 +211,42 @@ rule all:
 # Writes to a mirrored structure and drops a per-room _SUCCESS marker.
 # --------------------------
 rule bvg_per_room:
-    input:
-        room_dir=lambda wc: f"{IN_ROOT}/floor_{wc.floor}/room_{wc.room}"
+    # no input here
     output:
         success = BVG_ROOT + "/floor_{floor}/room_{room}/_BVG_SUCCESS"
     params:
-        out_dir = BVG_ROOT + "/floor_{floor}/room_{room}",
+        room_dir = lambda wc: f"{IN_ROOT}/floor_{wc.floor}/room_{wc.room}",
+        out_dir  = BVG_ROOT + "/floor_{floor}/room_{room}",
         ply_glob = PLY_GLOB,
         min_support = MIN_SUPPORT,
         dist_threshold = DIST_THRESH,
         bitmap_resolution = BITMAP_RES,
         normal_threshold = NORMAL_THRESH,
         overlook_probability = OVERLOOK_PROB
-    shell:
-        "python py_scripts/ransac_and_plane_detection.py "
-        "--in-dir {input.room_dir} "
-        "--out-dir {params.out_dir} "
-        "--glob {params.ply_glob} "
-        "--min-support {params.min_support} "
-        "--dist-threshold {params.dist_threshold} "
-        "--bitmap-resolution {params.bitmap_resolution} "
-        "--normal-threshold {params.normal_threshold} "
-        "--overlook-probability {params.overlook_probability} "
-        "&& python -c \"import pathlib; pathlib.Path(r'{output.success}').parent.mkdir(parents=True, exist_ok=True); pathlib.Path(r'{output.success}').write_text('OK\\n')\""
+    run:
+        from pathlib import Path
+        from snakemake.shell import shell
+
+        room = Path(params.room_dir)
+        out_succ = Path(output.success)
+        out_succ.parent.mkdir(parents=True, exist_ok=True)
+
+        shells = list(room.glob(params.ply_glob)) if room.exists() else []
+        if not shells:
+            out_succ.write_text("EMPTY\n")
+        else:
+            shell(
+                "python py_scripts/ransac_and_plane_detection.py "
+                "--in-dir {params.room_dir} "
+                "--out-dir {params.out_dir} "
+                "--glob {params.ply_glob} "
+                "--min-support {params.min_support} "
+                "--dist-threshold {params.dist_threshold} "
+                "--bitmap-resolution {params.bitmap_resolution} "
+                "--normal-threshold {params.normal_threshold} "
+                "--overlook-probability {params.overlook_probability}"
+            )
+            out_succ.write_text("OK\n")
 
 # --------------------------
 # PolyFit per room (convert BVGs in that room to OBJ)
