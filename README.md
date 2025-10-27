@@ -1,7 +1,3 @@
-Here’s a concise, copy-ready **README** section for your Git repository 👇
-
----
-
 # Running the Pipeline
 
 ## Requirements
@@ -18,7 +14,7 @@ Here’s a concise, copy-ready **README** section for your Git repository 👇
 
 ---
 
-## 1️⃣ Set up environment
+## 1️ Set up environment
 
 ### Linux / macOS / WSL
 
@@ -42,7 +38,7 @@ pip install C:/path/to/PolyFit-<version>-cp312-*.whl
 
 ---
 
-## 2️⃣ Place input data
+## 2️ Place input data
 
 ```
 data/input/deSkatting.e57
@@ -51,7 +47,7 @@ data/input/deSkatting_segmented.las
 
 ---
 
-## 3️⃣ Run the workflow
+## 3️ Run the workflow
 
 From the repository root (virtual environment active):
 
@@ -67,7 +63,7 @@ python -m snakemake --cores all --configfile config.yaml
 
 ---
 
-## 4️⃣ Output
+## 4️ Output
 
 Results are written under:
 
@@ -91,7 +87,7 @@ data/output/_PCG_DONE
 
 ---
 
-✅ **Checklist**
+ **Checklist**
 
 * [ ] Python 3.12 venv active
 * [ ] Dependencies + PolyFit wheel installed
