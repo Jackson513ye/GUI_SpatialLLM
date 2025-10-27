@@ -1,21 +1,101 @@
-# Spatial LLM
-Current LLM models lack deep spatial understanding and the ability to reason over geolocation and vision inputs. For complex spatial queries users need manual interpretation. This project aims to bridge the gap by enabling a chatbot to understand user queries and extract relevant spatial and visual data automatically.
+Here’s a concise, copy-ready **README** section for your Git repository 👇
 
-# GitRules
-### Goals
-- Keep main always deployable
-- Work in short branches (not more than a few days). All changes go via Pull Request (PR)!
-- Segher is the sole reviewer and merger
-- Small reviewable commits, in clean code using comments and error handling
+---
 
-### Daily flow 
-- Sync: git switch main && git pull --ff-only
-- Branch: git switch -c feature/<short-task-name>
-- Code → Commit (small, focused): git add -p && git commit -m "feat: ..."
-- Push & PR: git push -u origin HEAD
-- Wait for Segher to update/rebase and Squash & Merge when green
-- Clean up locally: git switch main && git pull --ff-only && git branch -d <branch>
+# Running the Pipeline
 
-### Rules
-- PR use so main stays protected
-- use prefix feature/<name>, fix/<name>,  chore/<name>
+## Requirements
+
+* **Python:** 3.12
+* **Shell:** `bash` (Linux, macOS, WSL, or Git Bash on Windows)
+* **PolyFit:** Download a wheel for Python 3.12 from [LiangliangNan/PolyFit Releases](https://github.com/LiangliangNan/PolyFit/releases)
+* **Input files:**
+
+  ```
+  data/input/deSkatting.e57
+  data/input/deSkatting_segmented.las
+  ```
+
+---
+
+## 1️⃣ Set up environment
+
+### Linux / macOS / WSL
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip wheel setuptools
+pip install -r requirements.txt
+pip install /path/to/PolyFit-<version>-cp312-*.whl
+```
+
+### Windows (Git Bash)
+
+```bash
+python -m venv .venv
+source .venv/Scripts/activate
+pip install --upgrade pip wheel setuptools
+pip install -r requirements.txt
+pip install C:/path/to/PolyFit-<version>-cp312-*.whl
+```
+
+---
+
+## 2️⃣ Place input data
+
+```
+data/input/deSkatting.e57
+data/input/deSkatting_segmented.las
+```
+
+---
+
+## 3️⃣ Run the workflow
+
+From the repository root (virtual environment active):
+
+```bash
+snakemake --cores all --configfile config.yaml
+```
+
+If `snakemake` is not found:
+
+```bash
+python -m snakemake --cores all --configfile config.yaml
+```
+
+---
+
+## 4️⃣ Output
+
+Results are written under:
+
+```
+data/output/
+```
+
+including generated PLYs, BVG/OBJ/CSV files, and the final marker:
+
+```
+data/output/_PCG_DONE
+```
+
+---
+
+## Notes
+
+* **Linux / macOS / WSL:** recommended environment.
+* **Windows:** run **inside Git Bash** or **WSL** (PowerShell/CMD will fail because `bash` is required).
+* The pipeline automatically handles panoramas, class splits, room segmentation, PolyFit, and PCG processing based on `config.yaml`.
+
+---
+
+✅ **Checklist**
+
+* [ ] Python 3.12 venv active
+* [ ] Dependencies + PolyFit wheel installed
+* [ ] Input `.e57` and `.las` files in `data/input/`
+* [ ] Run: `snakemake --cores all --configfile config.yaml`
+
+---
