@@ -5,7 +5,7 @@
 * **Python:** 3.12
 * **Shell:** `bash` (Linux, macOS, WSL, or Git Bash on Windows)
 * **PolyFit:** Download a wheel for Python 3.12 from [LiangliangNan/PolyFit Releases](https://github.com/LiangliangNan/PolyFit/releases)
-* **Easy3D** Download a wheel for Python 3.12 from [LiangliangNan/Easy3D Releases](https://github.com/LiangliangNan/Easy3D/releases)
+* **Easy3D:** Download a wheel for Python 3.12 from [LiangliangNan/Easy3D Releases](https://github.com/LiangliangNan/Easy3D/releases)
 * **Input files:**
 
   ```
