@@ -5,6 +5,7 @@
 * **Python:** 3.12
 * **Shell:** `bash` (Linux, macOS, WSL, or Git Bash on Windows)
 * **PolyFit:** Download a wheel for Python 3.12 from [LiangliangNan/PolyFit Releases](https://github.com/LiangliangNan/PolyFit/releases)
+* **Easy3D** Download a wheel for Python 3.12 from [LiangliangNan/Easy3D Releases](https://github.com/LiangliangNan/Easy3D/releases)
 * **Input files:**
 
   ```
@@ -33,7 +34,7 @@ python -m venv .venv
 source .venv/Scripts/activate
 pip install --upgrade pip wheel setuptools
 pip install -r requirements.txt
-pip install C:/path/to/PolyFit-<version>-cp312-*.whl
+pip install C:/path/to/PolyFit-<version>-cp312-*.whl C:/path/to/easy3D-<version>-cp312-*.whl
 ```
 
 ---
@@ -90,7 +91,7 @@ data/output/_PCG_DONE
  **Checklist**
 
 * [ ] Python 3.12 venv active
-* [ ] Dependencies + PolyFit wheel installed
+* [ ] Dependencies + PolyFit + Easy3D wheel installed
 * [ ] Input `.e57` and `.las` files in `data/input/`
 * [ ] Run: `snakemake --cores all --configfile config.yaml`
 
