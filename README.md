@@ -24,7 +24,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip wheel setuptools
 pip install -r requirements.txt
-pip install /path/to/PolyFit-<version>-cp312-*.whl
+pip install /path/to/PolyFit-<version>-cp312-*.whl /path/to/easy3D-<version>-cp312-*.whl
 ```
 
 ### Windows (Git Bash)
