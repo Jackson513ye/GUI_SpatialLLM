@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# SAM2 Model (too large for git)
+SAM2/checkpoints/*.pt
+SAM2/checkpoints/*.pth
+
+# Generated Outputs
+outputs/*.png
+outputs/*.jpg
+outputs/*.las
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
