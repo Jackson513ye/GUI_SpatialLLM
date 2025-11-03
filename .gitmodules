@@ -1,0 +1,9 @@
+[submodule "LM2PCG"]
+	path = LM2PCG
+	url = https://github.com/Jackson513ye/LM2PCG.git
+[submodule "SAM23D"]
+	path = SAM23D
+	url = https://github.com/Jackson513ye/SAM23D
+[submodule "GUI_SpatialLLM"]
+	path = GUI_SpatialLLM
+	url = https://github.com/Jackson513ye/GUI_SpatialLLM
