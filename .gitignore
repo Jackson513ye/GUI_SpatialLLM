@@ -1,0 +1,6 @@
+
+# Generated data and caches
+output2/
+__pycache__/
+*.pyc
+.env
