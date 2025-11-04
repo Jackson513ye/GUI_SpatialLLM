@@ -4,6 +4,8 @@
 
 A comprehensive framework for spatial understanding combining point cloud processing, 3D segmentation, and natural language interfaces. This project integrates indoor scene reconstruction, interactive 3D visualization, and AI-powered spatial reasoning.
 
+> **🚀 Quick Start:** Check out the [**GUI Setup Guide**](./GUI_SETUP_GUIDE.md) for step-by-step instructions to launch the interactive GUI.
+
 ## 🌟 Overview
 
 SpatialLLM consists of three integrated modules:
